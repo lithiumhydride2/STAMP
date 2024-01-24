@@ -1,0 +1,7 @@
+ray >= 2.0
+ortools
+scikit-image
+scikit-learn
+scipy
+imageio
+tensorboard

@@ -12,21 +12,43 @@ from arguments import arg_eval
 
 def main(config=None):
     if config:
-        arg_eval.graph_size, arg_eval.history_size, arg_eval.target_size, arg_eval.target_speed = config
+        (
+            arg_eval.graph_size,
+            arg_eval.history_size,
+            arg_eval.target_size,
+            arg_eval.target_speed,
+        ) = config
     os.makedirs(arg_eval.result_path, exist_ok=True)
-    device = torch.device('cuda') if arg_eval.use_gpu_driver else torch.device('cpu')
-    local_device = torch.device('cuda') if arg_eval.use_gpu_runner else torch.device('cpu')
+    device = torch.device("cuda") if arg_eval.use_gpu_driver else torch.device("cpu")
+    local_device = (
+        torch.device("cuda") if arg_eval.use_gpu_runner else torch.device("cpu")
+    )
     global_network = AttentionNet(arg_eval.embedding_dim).to(device)
-    checkpoint = torch.load(f'../{arg_eval.model_path}/checkpoint.pth')
-    global_network.load_state_dict(checkpoint['model'])
+    checkpoint = torch.load(f"../{arg_eval.model_path}/checkpoint.pth")
+    global_network.load_state_dict(checkpoint["model"])
 
-    print(f'Loading model: {arg_eval.run_name}...')
+    print(f"Loading model: {arg_eval.run_name}...")
 
     # init meta agents
     meta_runners = [Runner.remote(i) for i in range(arg_eval.num_meta)]
-    weights = global_network.to(local_device).state_dict() if device != local_device else global_network.state_dict()
+    weights = (
+        global_network.to(local_device).state_dict()
+        if device != local_device
+        else global_network.state_dict()
+    )
     curr_test = 1
-    metric_names = ['avgjsd', 'avgunc', 'minnvisit', 'avgrmse', 'stdunc', 'stdjsd', 'avgnvisit', 'stdnvisit', 'avggapvisit', 'stdgapvisit']
+    metric_names = [
+        "avgjsd",
+        "avgunc",
+        "minnvisit",
+        "avgrmse",
+        "stdunc",
+        "stdjsd",
+        "avgnvisit",
+        "stdnvisit",
+        "avggapvisit",
+        "stdgapvisit",
+    ]
     perf_metrics = {}
     for n in metric_names:
         perf_metrics[n] = []
@@ -56,19 +78,19 @@ def main(config=None):
             for job in done_jobs:
                 metrics, eval_num = job
                 eval_num_list += [eval_num]
-                avgjsd_list += [metrics['avgjsd']]
-                avgunc_list += [metrics['avgunc']]
-                stdjsd_list += [metrics['stdjsd']]
-                stdunc_list += [metrics['stdunc']]
-                minvisit_list += [metrics['minnvisit']]
-                avgvisit_list += [metrics['avgnvisit']]
-                stdvisit_list += [metrics['stdnvisit']]
+                avgjsd_list += [metrics["avgjsd"]]
+                avgunc_list += [metrics["avgunc"]]
+                stdjsd_list += [metrics["stdjsd"]]
+                stdunc_list += [metrics["stdunc"]]
+                minvisit_list += [metrics["minnvisit"]]
+                avgvisit_list += [metrics["avgnvisit"]]
+                stdvisit_list += [metrics["stdnvisit"]]
                 for n in metric_names:
                     perf_metrics[n].append(metrics[n])
-                budget_list += metrics['budget_list']
-                rmse_list += metrics['rmse_list']
-                jsd_list += metrics['jsd_list']
-                unc_list += metrics['unc_list']
+                budget_list += metrics["budget_list"]
+                rmse_list += metrics["rmse_list"]
+                jsd_list += metrics["jsd_list"]
+                unc_list += metrics["unc_list"]
 
             if curr_test > arg_eval.num_eval:
                 perf_data = []
@@ -88,37 +110,67 @@ def main(config=None):
                 unc_list = np.array(unc_list)
                 break
 
-        print(f'Graph {arg_eval.graph_size}, History {arg_eval.history_size}, #T {arg_eval.target_size},'
-              f' Budget {arg_eval.budget_size}, K {arg_eval.k_size}, results:')
+        print(
+            f"Graph {arg_eval.graph_size}, History {arg_eval.history_size}, #T {arg_eval.target_size},"
+            f" Budget {arg_eval.budget_size}, K {arg_eval.k_size}, results:"
+        )
         for i in range(len(metric_names)):
-            print(metric_names[i], ':\t', perf_data[i])
+            print(metric_names[i], ":\t", perf_data[i])
         if arg_eval.save_results:
-            os.makedirs(arg_eval.result_path + '/metric', exist_ok=True)
-            os.makedirs(arg_eval.result_path + '/traj', exist_ok=True)
-            csv_filename_metric = f'{arg_eval.result_path}/metric/tgt{arg_eval.target_size}_speed{round(1/arg_eval.target_speed)}' \
-                               f'_b{arg_eval.budget_size}_g{arg_eval.graph_size}_h{arg_eval.history_size}_metric.csv'
-            csv_filename_traj = f'{arg_eval.result_path}/traj/tgt{arg_eval.target_size}_speed{round(1/arg_eval.target_speed)}' \
-                               f'_b{arg_eval.budget_size}_g{arg_eval.graph_size}_h{arg_eval.history_size}_traj.csv'
+            os.makedirs(arg_eval.result_path + "/metric", exist_ok=True)
+            os.makedirs(arg_eval.result_path + "/traj", exist_ok=True)
+            csv_filename_metric = (
+                f"{arg_eval.result_path}/metric/tgt{arg_eval.target_size}_speed{round(1/arg_eval.target_speed)}"
+                f"_b{arg_eval.budget_size}_g{arg_eval.graph_size}_h{arg_eval.history_size}_metric.csv"
+            )
+            csv_filename_traj = (
+                f"{arg_eval.result_path}/traj/tgt{arg_eval.target_size}_speed{round(1/arg_eval.target_speed)}"
+                f"_b{arg_eval.budget_size}_g{arg_eval.graph_size}_h{arg_eval.history_size}_traj.csv"
+            )
 
             new_file = False if os.path.exists(csv_filename_traj) else True
-            field_names = ['avgjsd', 'avgunc', 'stdjsd', 'stdunc', 'minnvisit', 'avgvist', 'stdvisit']
-            with open(csv_filename_metric, 'a', newline='') as csvfile:
+            field_names = [
+                "avgjsd",
+                "avgunc",
+                "stdjsd",
+                "stdunc",
+                "minnvisit",
+                "avgvist",
+                "stdvisit",
+            ]
+            with open(csv_filename_metric, "a", newline="") as csvfile:
                 writer = csv.writer(csvfile)
                 if new_file:
                     writer.writerow(field_names)
-                metric_data = np.concatenate((avgjsd_list.reshape(-1, 1), avgunc_list.reshape(-1, 1), stdjsd_list.reshape(-1, 1),
-                                              stdunc_list.reshape(-1, 1), minvisit_list.reshape(-1, 1), avgvisit_list.reshape(-1, 1),
-                                              stdvisit_list.reshape(-1, 1)), axis=-1)
+                metric_data = np.concatenate(
+                    (
+                        avgjsd_list.reshape(-1, 1),
+                        avgunc_list.reshape(-1, 1),
+                        stdjsd_list.reshape(-1, 1),
+                        stdunc_list.reshape(-1, 1),
+                        minvisit_list.reshape(-1, 1),
+                        avgvisit_list.reshape(-1, 1),
+                        stdvisit_list.reshape(-1, 1),
+                    ),
+                    axis=-1,
+                )
                 writer.writerows(metric_data)
 
             new_file = False if os.path.exists(csv_filename_traj) else True
-            field_names = ['budget', 'unc', 'jsd', 'rmse']
-            with open(csv_filename_traj, 'a', newline='') as csvfile:
+            field_names = ["budget", "unc", "jsd", "rmse"]
+            with open(csv_filename_traj, "a", newline="") as csvfile:
                 writer = csv.writer(csvfile)
                 if new_file:
                     writer.writerow(field_names)
-                traj_data = np.concatenate((budget_list.reshape(-1, 1), unc_list.reshape(-1, 1), jsd_list.reshape(-1, 1),
-                                            rmse_list.reshape(-1, 1)), axis=-1)
+                traj_data = np.concatenate(
+                    (
+                        budget_list.reshape(-1, 1),
+                        unc_list.reshape(-1, 1),
+                        jsd_list.reshape(-1, 1),
+                        rmse_list.reshape(-1, 1),
+                    ),
+                    axis=-1,
+                )
                 writer.writerows(traj_data)
 
     except KeyboardInterrupt:
@@ -131,7 +183,9 @@ def main(config=None):
 class Runner:
     def __init__(self, meta_id):
         self.meta_id = meta_id
-        self.device = torch.device('cuda') if arg_eval.use_gpu_runner else torch.device('cpu')
+        self.device = (
+            torch.device("cuda") if arg_eval.use_gpu_runner else torch.device("cpu")
+        )
         self.local_net = AttentionNet(arg_eval.embedding_dim)
         self.local_net.to(self.device)
 
@@ -139,17 +193,29 @@ class Runner:
         self.local_net.load_state_dict(weights)
 
     def job(self, global_weights, eval_number, config=None):
-        print(f'\033[92mmeta{self.meta_id:02}:\033[0m eval {eval_number} starts')
+        print(f"\033[92mmeta{self.meta_id:02}:\033[0m eval {eval_number} starts")
         self.set_weights(global_weights)
-        save_img = True if arg_eval.save_img_gap != 0 and eval_number % arg_eval.save_img_gap == 0 else False
-        worker = WorkerEval(self.meta_id, self.local_net, eval_number, self.device, greedy=True, save_image=save_img, config=config)
+        save_img = (
+            True
+            if arg_eval.save_img_gap != 0 and eval_number % arg_eval.save_img_gap == 0
+            else False
+        )
+        worker = WorkerEval(
+            self.meta_id,
+            self.local_net,
+            eval_number,
+            self.device,
+            greedy=True,
+            save_image=save_img,
+            config=config,
+        )
         metrics = worker.run_episode(eval_number)
         return metrics, self.meta_id
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     ray.init()
-    print(f'#Evals: {arg_eval.num_eval}, #meta: {arg_eval.num_meta}')
+    print(f"#Evals: {arg_eval.num_eval}, #meta: {arg_eval.num_meta}")
     main()
     # Loop testing
     # for test_graph in [400]:
