@@ -6,7 +6,7 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import mean_squared_error
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, RBF, ConstantKernel as C
-from arguments import arg
+from .arguments import arg
 
 
 def add_t(X, t: float):

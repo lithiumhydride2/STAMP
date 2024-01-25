@@ -4,10 +4,11 @@ import ray
 import torch
 import numpy as np
 import time
-from network import AttentionNet
-from runner import Runner
+
 from eval_worker import WorkerEval
-from arguments import arg_eval
+from src.network import AttentionNet
+from src.runner import Runner
+from src.arguments import arg_eval
 
 
 def main(config=None):
