@@ -23,7 +23,7 @@ class Arguments:
         self.high_info_thre = math.exp(-0.5)  # defined target area
         self.adaptive_kernel = False
         self.budget_size = (39.9999, 40)  # monitoring horizon
-        self.graph_size = (100, 201)   # graph size - randomized during training
+        self.graph_size = (100, 201)  # graph size - randomized during training
         self.history_size = (50, 101)  # history sequence length
         self.k_size = 10  # knn - number of neighboring nodes
         self.target_size = (2, 6)
@@ -31,16 +31,16 @@ class Arguments:
         self.prior_measurement = True  # True for peak measures
 
         self.summary_window = 1
-        self.run_name = 'run'
-        self.model_path = f'models/{self.run_name}'
-        self.train_path = f'runs/{self.run_name}'
-        self.gifs_path = f'gifs/{self.run_name}'
+        self.run_name = "run"
+        self.model_path = f"models/{self.run_name}"
+        self.train_path = f"runs/{self.run_name}"
+        self.gifs_path = f"gifs/{self.run_name}"
         self.load_model = False
         self.use_wandb = False
         if self.use_wandb:
-            self.project_name = 'STAMP'
-            self.wandb_notes = ''
-            self.wandb_id = ''
+            self.project_name = "STAMP"
+            self.wandb_notes = ""
+            self.wandb_id = ""
         self.save_img_gap = 0  # 0 to turn off
         self.save_files = False
 
@@ -48,11 +48,11 @@ class Arguments:
 class ArgumentsEval(Arguments):
     def __init__(self):
         super().__init__()
-        self.high_info_thre = 'change in arguments'
-        self.prior_measurement = 'change in arguments'
+        self.high_info_thre = "change in arguments"
+        self.prior_measurement = "change in arguments"
 
-        self.run_name = 'run'
-        self.model_path = f'models/{self.run_name}'
+        self.run_name = "run"
+        self.model_path = f"models/{self.run_name}"
         self.result_path = self.run_name
         self.cuda_devices = [0]
         self.num_meta = 1  # number of threads
@@ -63,11 +63,14 @@ class ArgumentsEval(Arguments):
         self.history_size = 100  # history sequence length
         self.k_size = 10  # knn - number of neighboring nodes
         self.target_size = 6
-        self.target_speed = 1/20
+        self.target_speed = 1 / 20
         self.history_stride = 5
 
-        self.save_results = False  # save results to csv
-        self.save_img_gap = 0  # 0 to turn off, >=1 to save images
+        # self.save_results = False  # save results to csv
+        # self.save_img_gap = 0  # 0 to turn off, >=1 to save images
+        # enable save images
+        self.save_results = True
+        self.save_img_gap = 1
 
 
 arg = Arguments()
