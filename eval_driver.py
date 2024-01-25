@@ -25,7 +25,7 @@ def main(config=None):
         torch.device("cuda") if arg_eval.use_gpu_runner else torch.device("cpu")
     )
     global_network = AttentionNet(arg_eval.embedding_dim).to(device)
-    checkpoint = torch.load(f"../{arg_eval.model_path}/checkpoint.pth")
+    checkpoint = torch.load(f"./{arg_eval.model_path}/checkpoint.pth")
     global_network.load_state_dict(checkpoint["model"])
 
     print(f"Loading model: {arg_eval.run_name}...")
