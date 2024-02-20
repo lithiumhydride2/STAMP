@@ -88,7 +88,7 @@ class Env:
 
         self.node_feature = self.gp_wrapper.update_node_feature(self.curr_t)
 
-        # initialize evaluations
+        ## initialize evaluations
         self.RMSE = self.gp_wrapper.eval_avg_RMSE(self.ground_truth, self.curr_t)
         self.cov_trace = self.gp_wrapper.eval_avg_cov_trace(
             self.curr_t, self.high_info_idx
@@ -249,6 +249,7 @@ class Env:
         x1 = np.linspace(0, 1, 40)
         x2 = np.linspace(0, 1, 40)
         x1x2 = np.array(list(product(x1, x2)))
+        # such as:[(0.0, 0.0), (0.0, 0.5), (0.0, 1.0), (0.5, 0.0), (0.5, 0.5), (0.5, 1.0), (1.0, 0.0), (1.0, 0.5), (1.0, 1.0)]
         ground_truth = self.underlying_distrib.fn(x1x2)
         return ground_truth
 

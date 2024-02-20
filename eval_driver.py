@@ -112,7 +112,7 @@ def main(config=None):
                 break
 
         print(
-            f"Graph {arg_eval.graph_size}, History {arg_eval.history_size}, #T {arg_eval.target_size},"
+            f" Graph {arg_eval.graph_size}, History {arg_eval.history_size}, #T {arg_eval.target_size},"
             f" Budget {arg_eval.budget_size}, K {arg_eval.k_size}, results:"
         )
         for i in range(len(metric_names)):
