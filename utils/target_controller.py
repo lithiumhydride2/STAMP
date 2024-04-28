@@ -36,7 +36,7 @@ class VTSPGaussian:
 
     def step(self, steplen):
         """
-        计算 高斯函数的 均值，此处不大理解
+        根据 steplen 在 tsp 的节点之前移动
         """
         for i in range(self.n_targets):
             d = np.linalg.norm(self.tsp_coord[i, self.tsp_idx[i] + 1, :] - self.mean[i])

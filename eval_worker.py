@@ -12,6 +12,7 @@ from src.arguments import arg_eval
 
 
 class WorkerEval:
+
     def __init__(
         self,
         meta_id,
@@ -55,45 +56,47 @@ class WorkerEval:
 
     def run_episode(self, curr_eval):
         perf_metrics = dict()
+        # 从环境中获取 node_coords, graph, node_feature, budget
+        # node_coords: 初始化的一系列点，使用knn进行连接
+        # graph： 初始化的一系列点中的边集，边集为一个 dict, key 为 node , value 为 edge(to_node,length)
+        # node_feature: 在高斯过程中进行更新，包含当前的 node_feature 和 2s 之后的 node_feature
+        # budege , 应该是预测或运行时域，单位为 s
         node_coords, graph, node_feature, budget = self.env.reset(
             seed=self.global_step
         )  # node_feature: Array (node, (target x feature))
-        node_inputs = np.concatenate((node_coords, node_feature), axis=1)
-        node_inputs = (
-            torch.Tensor(node_inputs).unsqueeze(0).to(self.device)
-        )  # (1, node, 2+targetxfeature)
+        node_inputs = np.concatenate((node_coords, node_feature),
+                                     axis=1)  # 将 node 与其对应的特征拼接在一起
+        node_inputs = (torch.Tensor(node_inputs).unsqueeze(0).to(self.device)
+                       )  # (1, node, 2+targetxfeature) 转为张量并添加新的维度
         node_history = node_inputs.repeat(arg_eval.history_size, 1, 1)
-        history_pool_inputs = (
-            self.avgpool(node_history.permute(1, 2, 0)).permute(2, 0, 1).unsqueeze(0)
-        )
+        history_pool_inputs = (self.avgpool(node_history.permute(
+            1, 2, 0)).permute(2, 0, 1).unsqueeze(0))  # 进行平均池化并增加新的维度,作为批次大小
 
-        edge_inputs = [list(map(int, node)) for node in graph.values()]
-        spatio_pos_encoding = self.graph_pos_encoding(edge_inputs)
+        edge_inputs = [list(map(int, node))
+                       for node in graph.values()]  # values() 为 Edge()   类的迭代器
+        spatio_pos_encoding = self.graph_pos_encoding(
+            edge_inputs)  # 计算拉普拉斯矩阵的前 32 个特征值
         spatio_pos_encoding = (
-            torch.from_numpy(spatio_pos_encoding).float().unsqueeze(0).to(self.device)
-        )  # (1, node, 32)
-        edge_inputs = (
-            torch.tensor(edge_inputs).unsqueeze(0).to(self.device)
-        )  # (1, node, k)
+            torch.from_numpy(spatio_pos_encoding).float().unsqueeze(0).to(
+                self.device))  # (1, node, 32)
+        edge_inputs = (torch.tensor(edge_inputs).unsqueeze(0).to(self.device)
+                       )  # (1, node, k)
 
-        dt_history = torch.zeros((1, arg_eval.history_size, 1)).to(
-            self.device
-        )  # (1, history, 1)
+        dt_history = torch.zeros(
+            (1, arg_eval.history_size, 1)).to(self.device)  # (1, history, 1)
         dt_pool_inputs = self.avgpool(dt_history.permute(0, 2, 1)).permute(
-            0, 2, 1
-        )  # (1, hpool, 1)
+            0, 2, 1)  # (1, hpool, 1)
         dist_inputs = self.calc_distance_to_nodes(
-            current_idx=self.env.current_node_index
-        )
-        dist_inputs = (
-            torch.Tensor(dist_inputs).unsqueeze(0).to(self.device)
-        )  # (1, node, 1)
+            current_idx=self.env.current_node_index)
+        dist_inputs = (torch.Tensor(dist_inputs).unsqueeze(0).to(self.device)
+                       )  # (1, node, 1)
 
-        current_index = torch.tensor([[[self.env.current_node_index]]]).to(self.device)
+        current_index = torch.tensor([[[self.env.current_node_index]]
+                                      ]).to(self.device)
         spatio_mask = torch.zeros(
-            (1, arg_eval.graph_size + 1, arg_eval.k_size), dtype=torch.int64
-        ).to(self.device)
-        temporal_mask = torch.tensor([1])
+            (1, arg_eval.graph_size + 1, arg_eval.k_size),
+            dtype=torch.int64).to(self.device)  # 空间掩码
+        temporal_mask = torch.tensor([1])  # 时间掩码
 
         route = [current_index.item()]
         rmse_list = [self.env.RMSE]
@@ -120,6 +123,7 @@ class WorkerEval:
                 )
             time_start = time.time()
             with torch.no_grad():
+                # 此处为网络的输入与输出，输出 logp_list 可以 greedy 地从其中选取一个访问的目标
                 logp_list, value = self.local_net(
                     history_pool_inputs,
                     edge_inputs,
@@ -133,11 +137,13 @@ class WorkerEval:
             if self.greedy:
                 action_index = torch.argmax(logp_list, dim=1).long()
             else:
-                action_index = torch.multinomial(logp_list.exp(), 1).long().squeeze(1)
-            next_node_index = edge_inputs[:, current_index.item(), action_index.item()]
+                action_index = torch.multinomial(logp_list.exp(),
+                                                 1).long().squeeze(1)
+            next_node_index = edge_inputs[:,
+                                          current_index.item(),
+                                          action_index.item()]
             reward, done, node_feature, remain_budget, metrics = self.env.step(
-                next_node_index.item(), eval_speed=self.env_speed
-            )
+                next_node_index.item(), eval_speed=self.env_speed)
             time_end = time.time()
             self.planning_time += time_end - time_start
 
@@ -155,31 +161,30 @@ class WorkerEval:
 
             current_index = next_node_index.unsqueeze(0).unsqueeze(0)
             node_inputs = np.concatenate((node_coords, node_feature), axis=1)
-            node_inputs = torch.Tensor(node_inputs).unsqueeze(0).to(self.device)
-            node_history = torch.cat((node_history, node_inputs.clone()), dim=0)[
-                -arg_eval.history_size :, :, :
-            ]
-            history_pool_inputs = (
-                self.avgpool(node_history.permute(1, 2, 0))
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-            )
+            node_inputs = torch.Tensor(node_inputs).unsqueeze(0).to(
+                self.device)
+            node_history = torch.cat((node_history, node_inputs.clone()),
+                                     dim=0)[-arg_eval.history_size:, :, :]
+            history_pool_inputs = (self.avgpool(node_history.permute(
+                1, 2, 0)).permute(2, 0, 1).unsqueeze(0))
             dt_history += (budget_at_node[-1] - budget_at_node[-2]) / (
-                1.993 * 3
-            )  # 1% unc with timescale
+                1.993 * 3)  # 1% unc with timescale
             dt_history = torch.cat(
-                (dt_history, torch.tensor([[[0]]], device=self.device)), dim=1
-            )[:, -arg_eval.history_size :, :]
-            dt_pool_inputs = self.avgpool(dt_history.permute(0, 2, 1)).permute(0, 2, 1)
-            dist_inputs = self.calc_distance_to_nodes(current_idx=current_index.item())
-            dist_inputs = torch.Tensor(dist_inputs).unsqueeze(0).to(self.device)
+                (dt_history, torch.tensor([[[0]]], device=self.device)),
+                dim=1)[:, -arg_eval.history_size:, :]
+            dt_pool_inputs = self.avgpool(dt_history.permute(0, 2, 1)).permute(
+                0, 2, 1)
+            dist_inputs = self.calc_distance_to_nodes(
+                current_idx=current_index.item())
+            dist_inputs = torch.Tensor(dist_inputs).unsqueeze(0).to(
+                self.device)
 
             spatio_mask = torch.zeros(
-                (1, arg_eval.graph_size + 1, arg_eval.k_size), dtype=torch.int64
-            ).to(self.device)
-            temporal_mask = torch.tensor(
-                [(len(route) - 1) // arg_eval.history_stride + 1]
-            )
+                (1, arg_eval.graph_size + 1, arg_eval.k_size),
+                dtype=torch.int64).to(self.device)
+            temporal_mask = torch.tensor([
+                (len(route) - 1) // arg_eval.history_stride + 1
+            ])
 
             if done:
                 if self.save_image:
@@ -198,16 +203,12 @@ class WorkerEval:
                 perf_metrics["minnvisit"] = np.min(n_visit)
                 perf_metrics["avgnvisit"] = np.mean(n_visit)
                 perf_metrics["stdnvisit"] = np.std(n_visit)
-                perf_metrics["avggapvisit"] = (
-                    np.mean(list(map(np.mean, gap_visit)))
-                    if min(n_visit) > 1
-                    else np.nan
-                )
-                perf_metrics["stdgapvisit"] = (
-                    np.std(list(map(np.mean, gap_visit)))
-                    if min(n_visit) > 1
-                    else np.nan
-                )
+                perf_metrics["avggapvisit"] = (np.mean(
+                    list(map(np.mean, gap_visit)))
+                                               if min(n_visit) > 1 else np.nan)
+                perf_metrics["stdgapvisit"] = (np.std(
+                    list(map(np.mean, gap_visit)))
+                                               if min(n_visit) > 1 else np.nan)
                 perf_metrics["avgrmse"] = np.mean(rmse_list)
                 perf_metrics["avgjsd"] = np.mean(jsd_list)
                 perf_metrics["avgunc"] = np.mean(unc_list)
@@ -220,8 +221,7 @@ class WorkerEval:
                 print(
                     "\033[92m" + "meta{:02}:".format(self.meta_id) + "\033[0m",
                     "episode {} done at {} steps, avg JS {:.4g}".format(
-                        curr_eval, step, perf_metrics["avgjsd"]
-                    ),
+                        curr_eval, step, perf_metrics["avgjsd"]),
                 )
                 break
         print(
@@ -239,11 +239,17 @@ class WorkerEval:
                     A_matrix[i][j] = 1.0
         for i in range(arg_eval.graph_size + 1):
             D_matrix[i][i] = 1 / np.sqrt(len(edge_inputs[i]) - 1)
-        L = np.eye(arg_eval.graph_size + 1) - np.matmul(D_matrix, A_matrix, D_matrix)
+        # 计算图的 laplace 矩阵，表示图的连接关系
+        L = np.eye(arg_eval.graph_size + 1) - np.matmul(
+            D_matrix, A_matrix, D_matrix)
+        # 计算拉普拉斯矩阵特征值
         eigen_values, eigen_vector = np.linalg.eig(L)
         idx = eigen_values.argsort()
-        eigen_values, eigen_vector = eigen_values[idx], np.real(eigen_vector[:, idx])
-        eigen_vector = eigen_vector[:, 1 : 32 + 1]
+        eigen_values, eigen_vector = eigen_values[idx], np.real(
+            eigen_vector[:, idx])
+        eigen_vector = eigen_vector[:, 1:32 + 1]
+        # 升序排序，返回其中32个非零特征向量
+        #此外，拉普拉斯矩阵的第二小的特征值（称为代数连通度）和对应的特征向量（称为Fiedler向量）可以用来识别图的瓶颈区域，这对于图的划分和聚类特别有用。
         return eigen_vector
 
     def calc_distance_to_nodes(self, current_idx):
@@ -251,15 +257,14 @@ class WorkerEval:
         current_coord = self.env.node_coords[current_idx]
         for i, point_coord in enumerate(self.env.node_coords):
             dist_current_to_point = self.env.graph_ctrl.calc_distance(
-                current_coord, point_coord
-            )
+                current_coord, point_coord)
             all_dist.append(dist_current_to_point)
         return np.asarray(all_dist).reshape(-1, 1)
 
     def make_gif(self, path, n):
-        with imageio.get_writer(
-            "{}/{}_cov_trace_{:.4g}.mp4".format(path, n, self.env.cov_trace), fps=5
-        ) as writer:
+        with imageio.get_writer("{}/{}_cov_trace_{:.4g}.mp4".format(
+                path, n, self.env.cov_trace),
+                                fps=5) as writer:
             for frame in self.env.frame_files:
                 image = imageio.imread(frame)
                 writer.append_data(image)

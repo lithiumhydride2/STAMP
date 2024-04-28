@@ -20,10 +20,10 @@ def main(config=None):
             arg_eval.target_speed,
         ) = config
     os.makedirs(arg_eval.result_path, exist_ok=True)
-    device = torch.device("cuda") if arg_eval.use_gpu_driver else torch.device("cpu")
-    local_device = (
-        torch.device("cuda") if arg_eval.use_gpu_runner else torch.device("cpu")
-    )
+    device = torch.device("cuda") if arg_eval.use_gpu_driver else torch.device(
+        "cpu")
+    local_device = (torch.device("cuda")
+                    if arg_eval.use_gpu_runner else torch.device("cpu"))
     global_network = AttentionNet(arg_eval.embedding_dim).to(device)
     checkpoint = torch.load(f"./{arg_eval.model_path}/checkpoint.pth")
     global_network.load_state_dict(checkpoint["model"])
@@ -32,11 +32,8 @@ def main(config=None):
 
     # init meta agents
     meta_runners = [Runner.remote(i) for i in range(arg_eval.num_meta)]
-    weights = (
-        global_network.to(local_device).state_dict()
-        if device != local_device
-        else global_network.state_dict()
-    )
+    weights = (global_network.to(local_device).state_dict()
+               if device != local_device else global_network.state_dict())
     curr_test = 1
     metric_names = [
         "avgjsd",
@@ -71,7 +68,8 @@ def main(config=None):
         while True:
             jobList = []
             for i, meta_agent in enumerate(meta_runners):
-                jobList.append(meta_agent.job.remote(weights, curr_test, config))
+                jobList.append(
+                    meta_agent.job.remote(weights, curr_test, config))
                 curr_test += 1
             done_id, jobList = ray.wait(jobList, num_returns=arg_eval.num_meta)
             done_jobs = ray.get(done_id)
@@ -113,8 +111,7 @@ def main(config=None):
 
         print(
             f" Graph {arg_eval.graph_size}, History {arg_eval.history_size}, #T {arg_eval.target_size},"
-            f" Budget {arg_eval.budget_size}, K {arg_eval.k_size}, results:"
-        )
+            f" Budget {arg_eval.budget_size}, K {arg_eval.k_size}, results:")
         for i in range(len(metric_names)):
             print(metric_names[i], ":\t", perf_data[i])
         if arg_eval.save_results:
@@ -180,13 +177,14 @@ def main(config=None):
             ray.kill(a)
 
 
-@ray.remote(num_cpus=1, num_gpus=len(arg_eval.cuda_devices) / arg_eval.num_meta)
+@ray.remote(num_cpus=1,
+            num_gpus=len(arg_eval.cuda_devices) / arg_eval.num_meta)
 class Runner:
+
     def __init__(self, meta_id):
         self.meta_id = meta_id
-        self.device = (
-            torch.device("cuda") if arg_eval.use_gpu_runner else torch.device("cpu")
-        )
+        self.device = (torch.device("cuda")
+                       if arg_eval.use_gpu_runner else torch.device("cpu"))
         self.local_net = AttentionNet(arg_eval.embedding_dim)
         self.local_net.to(self.device)
 
@@ -194,13 +192,11 @@ class Runner:
         self.local_net.load_state_dict(weights)
 
     def job(self, global_weights, eval_number, config=None):
-        print(f"\033[92mmeta{self.meta_id:02}:\033[0m eval {eval_number} starts")
+        print(
+            f"\033[92mmeta{self.meta_id:02}:\033[0m eval {eval_number} starts")
         self.set_weights(global_weights)
-        save_img = (
-            True
-            if arg_eval.save_img_gap != 0 and eval_number % arg_eval.save_img_gap == 0
-            else False
-        )
+        save_img = (True if arg_eval.save_img_gap != 0
+                    and eval_number % arg_eval.save_img_gap == 0 else False)
         worker = WorkerEval(
             self.meta_id,
             self.local_net,

@@ -3,6 +3,7 @@ from sklearn.neighbors import NearestNeighbors
 
 
 class GraphController:
+
     def __init__(self, graph_size, start, k_size, obstacles=None):
         self.graph_size = graph_size
         self.start = np.array(start)
@@ -14,10 +15,12 @@ class GraphController:
         self.dijkstra_prev = []
 
     def generate_graph(self):
+        ## TODO(lih): self.node_coords在此处初始化
         self.node_coords = np.random.rand(self.graph_size, 2)
         self.start = self.start.reshape(1, 2)
         self.node_coords = np.vstack([self.start, self.node_coords])
 
+        # 使用 knn 连接图， 一个节点仅与其周围节点连接，
         if self.obstacles is None:
             X = self.node_coords
             knn = NearestNeighbors(n_neighbors=self.k_size)
@@ -29,21 +32,10 @@ class GraphController:
                     b = str(self.find_node_index(neighbour))
                     self.graph.add_node(a)
                     self.graph.add_edge(a, b, distances[i, j])
+            #  存储全图 dijsktra 信息
             self.calc_all_path_cost()
         else:
             raise NotImplementedError
-        # import matplotlib.pyplot as plt
-        # plt.figure(dpi=200)
-        # graph = [list(map(int, node)) for node in self.graph.edges.values()]
-        # for i in range(101):
-        #     for j in range(9):
-        #         plt.plot([X[i, 0], X[graph[i][j + 1], 0]], [X[i, 1], X[graph[i][j + 1], 1]], c='gray', alpha=0.2)
-        # for i in range(101):
-        #     plt.scatter(X[i, 0], X[i, 1], c='gray', s=30)
-        # plt.xlim(-0.1, 1.1)
-        # plt.ylim(-0.1, 1.1)
-        # plt.axis('equal')
-        # plt.show()
         return X, self.graph.edges
 
     def find_node_index(self, p):
@@ -81,12 +73,14 @@ class GraphController:
 
 
 class Edge:
+
     def __init__(self, to_node, length):
         self.to_node = to_node
         self.length = length
 
 
 class Graph:
+
     def __init__(self):
         self.nodes = set()
         self.edges = dict()
@@ -108,10 +102,11 @@ def dijkstra(graph, source):
     q = set()
     dist = {}
     prev = {}
-    for v in graph.nodes:       # initialization
-        dist[v] = float('Infinity')      # unknown distance from source to v
-        prev[v] = float('Infinity')      # previous node in optimal path from source
-        q.add(v)                # all nodes initially in q (unvisited nodes)
+    for v in graph.nodes:  # initialization
+        dist[v] = float("Infinity")  # unknown distance from source to v
+        prev[v] = float(
+            "Infinity")  # previous node in optimal path from source
+        q.add(v)  # all nodes initially in q (unvisited nodes)
 
     # distance from source to source
     dist[source] = 0
@@ -151,7 +146,7 @@ def to_array(prev, from_node):
     previous_node = prev[from_node]
     route = [from_node]
 
-    while previous_node != float('Infinity'):
+    while previous_node != float("Infinity"):
         route.append(previous_node)
         temp = previous_node
         previous_node = prev[temp]
@@ -160,8 +155,8 @@ def to_array(prev, from_node):
     return route
 
 
-if __name__ == '__main__':
-    graph_ctrl = GraphController(100, [0.5,0.5], 10)
+if __name__ == "__main__":
+    graph_ctrl = GraphController(100, [0.5, 0.5], 10)
     _, graph = graph_ctrl.generate_graph()
     edge_inputs = []
     for node in graph.values():

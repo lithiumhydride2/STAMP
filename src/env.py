@@ -80,6 +80,7 @@ class Env:
         # initialize GP
         self.curr_t = 0.0
         self.visit_t = [[] for _ in range(self.n_targets)]
+        # TODO(lih): GP init here
         self.gp_wrapper = GaussianProcessWrapper(self.n_targets, self.node_coords)
         if arg.prior_measurement:
             node_prior = self.underlying_distrib.mean
