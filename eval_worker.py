@@ -57,18 +57,21 @@ class WorkerEval:
     def run_episode(self, curr_eval):
         perf_metrics = dict()
         # 从环境中获取 node_coords, graph, node_feature, budget
-        # node_coords: 初始化的一系列点，使用knn进行连接
+        # node_coords: 初始化的一系列点，使用knn进行连接 （node , 2)
         # graph： 初始化的一系列点中的边集，边集为一个 dict, key 为 node , value 为 edge(to_node,length)
         # node_feature: 在高斯过程中进行更新，包含当前的 node_feature 和 2s 之后的 node_feature
         # budege , 应该是预测或运行时域，单位为 s
         node_coords, graph, node_feature, budget = self.env.reset(
             seed=self.global_step
-        )  # node_feature: Array (node, (target x feature))
+        )  # node_feature: Array (node, (target x feature)) ，feature = 4
         node_inputs = np.concatenate((node_coords, node_feature),
                                      axis=1)  # 将 node 与其对应的特征拼接在一起
         node_inputs = (torch.Tensor(node_inputs).unsqueeze(0).to(self.device)
                        )  # (1, node, 2+targetxfeature) 转为张量并添加新的维度
-        node_history = node_inputs.repeat(arg_eval.history_size, 1, 1)
+        node_history = node_inputs.repeat(
+            arg_eval.history_size, 1,
+            1)  # (history_size , node , 2 + target * feature)
+        # 一维平均池化对最后一个维度造成影响
         history_pool_inputs = (self.avgpool(node_history.permute(
             1, 2, 0)).permute(2, 0, 1).unsqueeze(0))  # 进行平均池化并增加新的维度,作为批次大小
 
@@ -123,6 +126,7 @@ class WorkerEval:
                 )
             time_start = time.time()
             with torch.no_grad():
+                # TODO(lih)
                 # 此处为网络的输入与输出，输出 logp_list 可以 greedy 地从其中选取一个访问的目标
                 logp_list, value = self.local_net(
                     history_pool_inputs,
@@ -280,7 +284,9 @@ if __name__ == "__main__":
             os.makedirs(arg_eval.gifs_path)
     device = torch.device("cuda")
     localNetwork = AttentionNet(arg_eval.embedding_dim).cuda()
-    checkpoint = torch.load(f"../{arg_eval.model_path}/checkpoint.pth")
+    checkpoint = torch.load(f"./{arg_eval.model_path}/checkpoint.pth")
     localNetwork.load_state_dict(checkpoint["model"])
+    num = sum([param.nelement() for param in localNetwork.parameters()])
+    print(num)
     worker = WorkerEval(0, localNetwork, 2, save_image=save_img)
     worker.run_episode(0)

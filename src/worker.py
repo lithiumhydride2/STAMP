@@ -9,6 +9,7 @@ from .arguments import arg
 
 
 class Worker:
+
     def __init__(
         self,
         meta_id,
@@ -36,9 +37,9 @@ class Worker:
             target_size=target_size,
         )
         self.local_net = local_net
-        self.avgpool = torch.nn.AvgPool1d(
-            kernel_size=arg.history_stride, stride=arg.history_stride, ceil_mode=True
-        )
+        self.avgpool = torch.nn.AvgPool1d(kernel_size=arg.history_stride,
+                                          stride=arg.history_stride,
+                                          ceil_mode=True)
         self.episode_buffer_keys = [
             "history",
             "edge",
@@ -65,44 +66,38 @@ class Worker:
             budget,
         ) = self.env.reset()  # node_feature: Array (node, (target x feature))
         node_inputs = np.concatenate((node_coords, node_feature), axis=1)
-        node_inputs = (
-            torch.Tensor(node_inputs).unsqueeze(0).to(self.device)
-        )  # (1, node, 2+targetxfeature)
+        node_inputs = (torch.Tensor(node_inputs).unsqueeze(0).to(self.device)
+                       )  # (1, node, 2+targetxfeature)
         node_history = node_inputs.repeat(
-            self.history_size, 1, 1
-        )  # (history, node, 2+targetxfeature)
-        history_pool_inputs = (
-            self.avgpool(node_history.permute(1, 2, 0)).permute(2, 0, 1).unsqueeze(0)
-        )  # (1, hpool, n, 2+targetxfeature)
+            self.history_size, 1, 1)  # (history, node, 2+targetxfeature)
+        history_pool_inputs = (self.avgpool(node_history.permute(
+            1, 2,
+            0)).permute(2, 0,
+                        1).unsqueeze(0))  # (1, hpool, n, 2+targetxfeature)
 
         edge_inputs = [list(map(int, node)) for node in graph.values()]
         spatio_pos_encoding = self.graph_pos_encoding(edge_inputs)
         spatio_pos_encoding = (
-            torch.from_numpy(spatio_pos_encoding).float().unsqueeze(0).to(self.device)
-        )  # (1, node, 32)
-        edge_inputs = (
-            torch.tensor(edge_inputs).unsqueeze(0).to(self.device)
-        )  # (1, node, k)
+            torch.from_numpy(spatio_pos_encoding).float().unsqueeze(0).to(
+                self.device))  # (1, node, 32)
+        edge_inputs = (torch.tensor(edge_inputs).unsqueeze(0).to(self.device)
+                       )  # (1, node, k)
 
-        dt_history = torch.zeros((1, self.history_size, 1)).to(
-            self.device
-        )  # (1, history, 1)
+        dt_history = torch.zeros(
+            (1, self.history_size, 1)).to(self.device)  # (1, history, 1)
         dt_pool_inputs = self.avgpool(dt_history.permute(0, 2, 1)).permute(
-            0, 2, 1
-        )  # (1, hpool, 1)
+            0, 2, 1)  # (1, hpool, 1)
         dist_inputs = self.calc_distance_to_nodes(
-            current_idx=self.env.current_node_index
-        )
+            current_idx=self.env.current_node_index)
         dist_inputs[dist_inputs > 1.5] = 1.5
-        dist_inputs = (
-            torch.Tensor(dist_inputs).unsqueeze(0).to(self.device)
-        )  # (1, node, 1)
+        dist_inputs = (torch.Tensor(dist_inputs).unsqueeze(0).to(self.device)
+                       )  # (1, node, 1)
 
-        current_index = torch.tensor([[[self.env.current_node_index]]]).to(self.device)
+        current_index = torch.tensor([[[self.env.current_node_index]]
+                                      ]).to(self.device)
 
-        spatio_mask = torch.zeros(
-            (1, self.graph_size + 1, arg.k_size), dtype=torch.bool
-        ).to(self.device)
+        spatio_mask = torch.zeros((1, self.graph_size + 1, arg.k_size),
+                                  dtype=torch.bool).to(self.device)
         temporal_mask = torch.tensor([1])
         return (
             node_coords,
@@ -169,12 +164,14 @@ class Worker:
             if self.greedy:
                 action_index = torch.argmax(logp_list, dim=1).long()
             else:
-                action_index = torch.multinomial(logp_list.exp(), 1).long().squeeze(1)
+                action_index = torch.multinomial(logp_list.exp(),
+                                                 1).long().squeeze(1)
             logp = torch.gather(logp_list, 1, action_index.unsqueeze(0))
-            next_node_index = edge_inputs[:, current_index.item(), action_index.item()]
+            next_node_index = edge_inputs[:,
+                                          current_index.item(),
+                                          action_index.item()]
             reward, done, node_feature, remain_budget, _ = self.env.step(
-                next_node_index.item(), self.global_step
-            )
+                next_node_index.item(), self.global_step)
 
             episode_buffer["history"] += history_pool_inputs
             episode_buffer["edge"] += edge_inputs
@@ -187,7 +184,8 @@ class Worker:
             episode_buffer["temporalmask"] += temporal_mask
             episode_buffer["spatiomask"] += spatio_mask
             episode_buffer["spatiope"] += spatio_pos_encoding
-            episode_buffer["reward"] += torch.Tensor([[[reward]]]).to(self.device)
+            episode_buffer["reward"] += torch.Tensor([[[reward]]
+                                                      ]).to(self.device)
             episode_buffer["done"] += [done]
 
             route += [next_node_index.item()]
@@ -201,31 +199,31 @@ class Worker:
 
             current_index = next_node_index.unsqueeze(0).unsqueeze(0)
             node_inputs = np.concatenate((node_coords, node_feature), axis=1)
-            node_inputs = torch.Tensor(node_inputs).unsqueeze(0).to(self.device)
-            node_history = torch.cat((node_history, node_inputs.clone()), dim=0)[
-                -self.history_size :, :, :
-            ]
-            history_pool_inputs = (
-                self.avgpool(node_history.permute(1, 2, 0))
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-            )
+            node_inputs = torch.Tensor(node_inputs).unsqueeze(0).to(
+                self.device)
+            node_history = torch.cat((node_history, node_inputs.clone()),
+                                     dim=0)[-self.history_size:, :, :]
+            history_pool_inputs = (self.avgpool(node_history.permute(
+                1, 2, 0)).permute(2, 0, 1).unsqueeze(0))
             dt_history += (budget_list[-1] - budget_list[-2]) / (
-                1.993 * 3
-            )  # 1% unc with timescale
+                1.993 * 3)  # 1% unc with timescale
             dt_history = torch.cat(
-                (dt_history, torch.tensor([[[0]]], device=self.device)), dim=1
-            )[:, -self.history_size :, :]
-            dt_pool_inputs = self.avgpool(dt_history.permute(0, 2, 1)).permute(0, 2, 1)
-            dist_inputs = self.calc_distance_to_nodes(current_idx=current_index.item())
+                (dt_history, torch.tensor([[[0]]], device=self.device)),
+                dim=1)[:, -self.history_size:, :]
+            dt_pool_inputs = self.avgpool(dt_history.permute(0, 2, 1)).permute(
+                0, 2, 1)
+            dist_inputs = self.calc_distance_to_nodes(
+                current_idx=current_index.item())
             dist_inputs[dist_inputs > 1.5] = 1.5
-            dist_inputs = torch.Tensor(dist_inputs).unsqueeze(0).to(self.device)
+            dist_inputs = torch.Tensor(dist_inputs).unsqueeze(0).to(
+                self.device)
 
             # mask
-            spatio_mask = torch.zeros(
-                (1, self.graph_size + 1, arg.k_size), dtype=torch.bool
-            ).to(self.device)
-            temporal_mask = torch.tensor([(len(route) - 1) // arg.history_stride + 1])
+            spatio_mask = torch.zeros((1, self.graph_size + 1, arg.k_size),
+                                      dtype=torch.bool).to(self.device)
+            temporal_mask = torch.tensor([
+                (len(route) - 1) // arg.history_stride + 1
+            ])
 
             if done:
                 # save gif
@@ -277,12 +275,10 @@ class Worker:
         gap_visit = list(map(np.diff, self.env.visit_t))
         perf_metrics["avgnvisit"] = np.mean(n_visit)
         perf_metrics["stdnvisit"] = np.std(n_visit)
-        perf_metrics["avggapvisit"] = (
-            np.mean(list(map(np.mean, gap_visit))) if min(n_visit) > 1 else np.nan
-        )
-        perf_metrics["stdgapvisit"] = (
-            np.std(list(map(np.mean, gap_visit))) if min(n_visit) > 1 else np.nan
-        )
+        perf_metrics["avggapvisit"] = (np.mean(list(map(np.mean, gap_visit)))
+                                       if min(n_visit) > 1 else np.nan)
+        perf_metrics["stdgapvisit"] = (np.std(list(map(np.mean, gap_visit)))
+                                       if min(n_visit) > 1 else np.nan)
         perf_metrics["avgrmse"] = np.mean(rmse_list)
         perf_metrics["avgunc"] = np.mean(unc_list)
         perf_metrics["avgjsd"] = np.mean(jsd_list)
@@ -290,8 +286,7 @@ class Worker:
         perf_metrics["stdunc"] = np.mean(unc_stddev_list)
         perf_metrics["stdjsd"] = np.mean(jsd_stddev_list)
         perf_metrics["f1"] = self.env.gp_wrapper.eval_avg_F1(
-            self.env.ground_truth, self.env.curr_t
-        )
+            self.env.ground_truth, self.env.curr_t)
         perf_metrics["mi"] = self.env.gp_wrapper.eval_avg_MI(self.env.curr_t)
         perf_metrics["covtr"] = self.env.cov_trace
         perf_metrics["js"] = self.env.JS
@@ -301,8 +296,7 @@ class Worker:
         print(
             "\033[92m" + "meta{:02}:".format(self.meta_id) + "\033[0m",
             "episode {} done at {} steps, avg JS {:.4g}".format(
-                episode_number, step, perf_metrics["avgjsd"]
-            ),
+                episode_number, step, perf_metrics["avgjsd"]),
         )
 
         with torch.no_grad():
@@ -330,22 +324,18 @@ class Worker:
                 else:
                     nextnonterminal = 1.0 - episode_buffer["done"][i + 1]
                     nextvalue = episode_buffer["value"][i + 1].item()
-                delta = (
-                    episode_buffer["reward"][i].item()
-                    + arg.gamma * nextvalue * nextnonterminal
-                    - episode_buffer["value"][i].item()
-                )
+                delta = (episode_buffer["reward"][i].item() +
+                         arg.gamma * nextvalue * nextnonterminal -
+                         episode_buffer["value"][i].item())
                 lastgaelam = (
-                    delta + arg.gamma * arg.gae_lambda * nextnonterminal * lastgaelam
-                )
+                    delta +
+                    arg.gamma * arg.gae_lambda * nextnonterminal * lastgaelam)
                 episode_buffer["advantage"].insert(
-                    0, torch.Tensor([[lastgaelam]]).to(self.device)
-                )
+                    0,
+                    torch.Tensor([[lastgaelam]]).to(self.device))
             episode_buffer["return"] = [
-                adv + val
-                for adv, val in zip(
-                    episode_buffer["advantage"], episode_buffer["value"]
-                )
+                adv + val for adv, val in zip(episode_buffer["advantage"],
+                                              episode_buffer["value"])
             ]
 
         return episode_buffer, perf_metrics
@@ -359,11 +349,13 @@ class Worker:
                     A_matrix[i][j] = 1.0
         for i in range(self.graph_size + 1):
             D_matrix[i][i] = 1 / np.sqrt(len(edge_inputs[i]) - 1)
-        L = np.eye(self.graph_size + 1) - np.matmul(D_matrix, A_matrix, D_matrix)
+        L = np.eye(self.graph_size + 1) - np.matmul(D_matrix, A_matrix,
+                                                    D_matrix)
         eigen_values, eigen_vector = np.linalg.eig(L)
         idx = eigen_values.argsort()
-        eigen_values, eigen_vector = eigen_values[idx], np.real(eigen_vector[:, idx])
-        eigen_vector = eigen_vector[:, 1 : 32 + 1]
+        eigen_values, eigen_vector = eigen_values[idx], np.real(
+            eigen_vector[:, idx])
+        eigen_vector = eigen_vector[:, 1:32 + 1]
         return eigen_vector
 
     def calc_distance_to_nodes(self, current_idx):
@@ -371,15 +363,14 @@ class Worker:
         current_coord = self.env.node_coords[current_idx]
         for i, point_coord in enumerate(self.env.node_coords):
             dist_current_to_point = self.env.graph_ctrl.calc_distance(
-                current_coord, point_coord
-            )
+                current_coord, point_coord)
             all_dist.append(dist_current_to_point)
         return np.asarray(all_dist).reshape(-1, 1)
 
     def make_gif(self, path, n):
-        with imageio.get_writer(
-            "{}/{}_cov_trace_{:.4g}.mp4".format(path, n, self.env.cov_trace), fps=5
-        ) as writer:
+        with imageio.get_writer("{}/{}_cov_trace_{:.4g}.mp4".format(
+                path, n, self.env.cov_trace),
+                                fps=5) as writer:
             for frame in self.env.frame_files:
                 image = imageio.imread(frame)
                 writer.append_data(image)

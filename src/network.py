@@ -193,6 +193,9 @@ class EncoderLayer(nn.Module):
 
 
 class DecoderLayer(nn.Module):
+    '''
+    encoder_layer 和 decoder_layer 区别仅在于 encoder 需要 memory 作为输入。
+    '''
 
     def __init__(self, embedding_dim, n_head):
         super(DecoderLayer, self).__init__()
@@ -217,6 +220,9 @@ class DecoderLayer(nn.Module):
 
 
 class Encoder(nn.Module):
+    '''
+    Encoder 是一个 self-attention
+    '''
 
     def __init__(self, embedding_dim=128, n_head=8, n_layer=3):
         super(Encoder, self).__init__()
@@ -230,6 +236,9 @@ class Encoder(nn.Module):
 
 
 class Decoder(nn.Module):
+    '''
+    Decoder 是一个 cross-attention
+    '''
 
     def __init__(self, embedding_dim=128, n_head=8, n_layer=1):
         super(Decoder, self).__init__()
@@ -301,39 +310,51 @@ class AttentionNet(nn.Module):
         history_inputs: batch x #history x #nodes x inputdim
         temporal_mask: batch. Current step, indicate number of valid history, range(1,+inf)
         """
-        feature_size = 4
+        feature_size = 4  # 当前 feature 与 2s 之后的 feature
         batch_size, history_size, graph_size, input_dim = history_inputs.shape
-        target_size = (input_dim - 2) // feature_size
-        history_inputs = history_inputs.reshape(-1, 1, input_dim)
-        loc_feature = self.loc_embedding(history_inputs[:, :, :2])
-        target_feature = torch.cat([
-            self.belief_embedding(history_inputs[:, :, 2 + i * feature_size:2 +
-                                                 (1 + i) * feature_size])
-            for i in range(target_size)
-        ],
-                                   dim=1)
+        target_size = (input_dim - 2) // feature_size  # target 为潜在目标的个数
+        history_inputs = history_inputs.reshape(
+            -1, 1, input_dim)  # input_dim = 2 + target x feature
+        loc_feature = self.loc_embedding(
+            history_inputs[:, :, :2])  # 使用历史 node_coords 通过线性层获得 loc_embedding
+        # [graph_size * history_size , 1 , 128]
+        target_feature = torch.cat(
+            [
+                self.belief_embedding(
+                    history_inputs[:, :, 2 + i * feature_size:2 +
+                                   (1 + i) * feature_size])
+                for i in range(target_size)
+            ],  # 对于每个单独的GP 获取一个 belief_embedding 然后 concat 起来
+            dim=1)  # [graph_size * history_size , target_size , 128]
         embedded_feature = torch.cat((loc_feature, target_feature), dim=1)
         embedded_feature = self.target_encoder(
             embedded_feature[:, :1, :], embedded_feature)  # (bxgxh, 1, 128)
+        # loc_feature 和 target_feature 之间的 cross-attention
         embedded_feature = embedded_feature.reshape(batch_size, history_size,
                                                     graph_size,
                                                     self.embedding_dim)
-
+        # [batch_size , history_size , graph_size , 128]
         embedded_feature = embedded_feature.permute(0, 2, 1, 3).reshape(
             -1, history_size, self.embedding_dim)  # (bx201)x10x128
+        # 将 batch_size 压缩
         dt_inputs = dt_inputs.unsqueeze(1).repeat(1, graph_size, 1, 1).reshape(
-            -1, history_size, 1)  # (bx201)x10x1
+            -1, history_size, 1)  # (batch_size x201)x10x1
+
+        # 加入 timefusion_layer 的线性层
         embedded_feature += self.timefusion_layer(dt_inputs)
 
-        mask = torch.zeros((batch_size * graph_size, 1, history_size),
-                           dtype=torch.bool).to(history_inputs.device)
+        mask = torch.zeros(
+            (batch_size * graph_size, 1, history_size),
+            dtype=torch.bool).to(history_inputs.device)  #（201，batch_size，20）
         if temporal_mask is not None:
             temporal_mask[temporal_mask > history_size] = history_size
             for ib in range(batch_size):
-                mask[ib * graph_size:(ib + 1) * graph_size, 0, :history_size -
-                     temporal_mask[ib]] = True  # mask step<=0
+                mask[ib * graph_size:(ib + 1) * graph_size,
+                     0, :history_size - temporal_mask[
+                         ib]] = True  # mask step<=0 排除超过 history_size 的数据
         embedded_temporal_feature = self.temporal_encoder(
             embedded_feature[:, -1:, :], embedded_feature, mask)
+        # embedded_feature 中 最新特征 和 其他特征 的 cross-attention
         embedded_temporal_feature = embedded_temporal_feature.reshape(
             batch_size, graph_size, self.embedding_dim)  # bx201x128
         return embedded_temporal_feature
@@ -341,24 +362,28 @@ class AttentionNet(nn.Module):
     def spatio_attention(self, embedded_feature, edge_inputs, dist_inputs,
                          current_index, spatio_pos_encoding, spatio_mask):
         # No LSTM, budget, scale
-        batch_size, graph_size, neighbor_size = edge_inputs.shape
-        embedding_dim = embedded_feature.size(-1)
-        current_edge = torch.gather(edge_inputs, 1,
-                                    current_index.repeat(
-                                        1, 1, neighbor_size)).permute(0, 2, 1)
+        batch_size, graph_size, neighbor_size = edge_inputs.shape  # 输入图中每个邻居
+        embedding_dim = embedded_feature.size(-1)  # 128
+        current_edge = torch.gather(
+            edge_inputs, 1, current_index.repeat(1, 1, neighbor_size)).permute(
+                0, 2, 1)  # 根据当前节点的邻居，收集索引 (1,10,1)
+        # spatio_mask (1,201,10)
         if spatio_mask is not None:
             mask = torch.gather(spatio_mask, 1,
                                 current_index.repeat(1, 1, neighbor_size)).to(
-                                    embedded_feature.device)
+                                    embedded_feature.device)  # (1,1,10)
         else:
             mask = torch.zeros((batch_size, 1, neighbor_size),
                                dtype=torch.bool).to(embedded_feature.device)
-        mask[:, :, 0] = 1  # don't stay at current position
-
+        mask[:, :, 0] = 1  # don't stay at current position， mask 似乎是表示访问过哪些节点？
+        # 通过线性层产生 spatio_pos_embedding
         embedded_feature += self.spatio_pos_embedding(spatio_pos_encoding)
-        embedded_feature = self.spatio_encoder(embedded_feature)
+        embedded_feature = self.spatio_encoder(
+            embedded_feature)  # self-attention
+        # dist_inputs (1,graph_size,1)
         embedded_feature = self.distfusion_layer(
-            torch.cat((embedded_feature, dist_inputs), dim=-1))
+            torch.cat((embedded_feature, dist_inputs),
+                      dim=-1))  # 通过线性层进行 distfusion_layer
         connected_nodes_feature = torch.gather(
             embedded_feature, 1, current_edge.repeat(1, 1, embedding_dim))
         current_node_feature = torch.gather(
@@ -366,8 +391,11 @@ class AttentionNet(nn.Module):
         embedded_spatio_feature = self.spatio_decoder(current_node_feature,
                                                       connected_nodes_feature,
                                                       mask)
+        # 分别从 embeddef_feature 中收集相连节点的feature与 当前节点的 feature 做出 cross-attention
         logp_list = self.pointer(embedded_spatio_feature,
                                  connected_nodes_feature, mask)
+        # TODO 理解一下维度
+        # pointer 为一个单头 attention query 为 embedded_feature , key-value 为 connected_nodes_feature
         logp_list = logp_list.squeeze(1)
         value = self.value_output(embedded_spatio_feature)
         return logp_list, value
@@ -381,7 +409,7 @@ class AttentionNet(nn.Module):
                 spatio_pos_encoding,
                 temporal_mask,
                 spatio_mask=None):
-        with autocast():
+        with autocast():  # 自动为 GPU 选择操作精度，在不牺牲准确性情况下提高性能
             embedded_temporal_feature = self.temporal_attention(
                 history_inputs, temporal_mask, dt_inputs)
             logp_list, value = self.spatio_attention(embedded_temporal_feature,
